@@ -104,15 +104,17 @@ jobs:
 
       - name: Check Apple credentials
         env:
-          CERTIFICATE: ${{ secrets.IOS_DISTRIBUTION_P12 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+          CERTIFICATE: ${{ secrets.MACOS_DISTRIBUTION_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_DISTRIBUTION_PASSWORD }}
           INSTALLER: ${{ secrets.MACOS_INSTALLER_P12 }}
           INSTALLER_PASSWORD: ${{ secrets.MACOS_INSTALLER_PASSWORD }}
-          API_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-          API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          APP_PROFILE: ${{ secrets.MACOS_APP_STORE_PROFILE }}
+          EXTENSION_PROFILE: ${{ secrets.CAMERA_EXTENSION_APP_STORE_PROFILE }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
-          for name in CERTIFICATE CERTIFICATE_PASSWORD INSTALLER INSTALLER_PASSWORD API_KEY API_KEY_ID API_ISSUER_ID; do
+          for name in CERTIFICATE CERTIFICATE_PASSWORD INSTALLER INSTALLER_PASSWORD APP_PROFILE EXTENSION_PROFILE API_KEY API_KEY_ID API_ISSUER_ID; do
             if [[ -z "${!name}" ]]; then
               echo "::error::$name is empty; configure the Apple secrets listed in docs/testflight.md."
               exit 1
@@ -131,8 +133,8 @@ jobs:
         id: certificate
         uses: ./.github/actions/import-signing-identity
         with:
-          p12: ${{ secrets.IOS_DISTRIBUTION_P12 }}
-          password: ${{ secrets.IOS_DISTRIBUTION_PASSWORD }}
+          p12: ${{ secrets.MACOS_DISTRIBUTION_P12 }}
+          password: ${{ secrets.MACOS_DISTRIBUTION_PASSWORD }}
           kind: Apple Distribution
           intermediates: AppleWWDRCAG3
 
@@ -148,17 +150,19 @@ jobs:
           keychain-name: autoswitchcam-installer
           trusted-tool: /usr/bin/productbuild
 
-      - name: Prepare app and extension provisioning profiles
+      - name: Install app and extension provisioning profiles
         env:
-          API_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
-          API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
-          IDENTITY: ${{ steps.certificate.outputs.identity }}
+          API_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_PROFILE: ${{ secrets.MACOS_APP_STORE_PROFILE }}
+          EXTENSION_PROFILE: ${{ secrets.CAMERA_EXTENSION_APP_STORE_PROFILE }}
         run: |
           umask 077
           printf '%s\n' "$API_KEY" > "$RUNNER_TEMP/autoswitchcam-api.p8"
-          python3 scripts/prepare-profiles.py --key "$RUNNER_TEMP/autoswitchcam-api.p8" \
-            --identity "$IDENTITY" --output "$RUNNER_TEMP/autoswitchcam-profiles"
+          mkdir -p "$RUNNER_TEMP/autoswitchcam-profiles"
+          printf '%s' "$APP_PROFILE" | base64 --decode > "$RUNNER_TEMP/autoswitchcam-profiles/AutoSwitchCam.provisionprofile"
+          printf '%s' "$EXTENSION_PROFILE" | base64 --decode > "$RUNNER_TEMP/autoswitchcam-profiles/AutoSwitchCamExtension.provisionprofile"
 
       - name: Sign app, camera extension and installer
         env:
@@ -175,8 +179,8 @@ jobs:
 
       - name: Upload and verify Apple processing
         env:
-          API_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           VERSION: ${{ needs.checks.outputs.version }}
           BUILD_NUMBER: ${{ needs.checks.outputs.build-number }}
         run: |

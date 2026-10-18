@@ -31,18 +31,17 @@ The extension's app group and Mach service use
 `W76LFH4CZ4.com.diogoviannaaraujo.AutoSwitchCam.CameraExtension`.
 Both executables enable App Sandbox. The app also requests camera access.
 
-The workflow registers missing bundle IDs/capabilities and creates or reuses Mac
-App Store profiles for its imported Apple Distribution certificate. It validates
-each profile's platform, expiration, team, bundle ID, distribution type, and
+The app and camera extension use separate Mac App Store profiles generated on
+Apple’s developer website with AutoSwitchCam’s own Apple Distribution certificate.
+The workflow validates each profile's platform, expiration, team, bundle ID, distribution type, and
 certificate before signing the nested framework, extension, and finally app.
-The Lightray provisioning profiles cannot be reused because their bundle IDs differ.
 
 Create a **macOS** app named **AutoSwitchCam** in
 [App Store Connect](https://appstoreconnect.apple.com/apps), using the app bundle
 ID above, English (U.S.) as the primary language, and `AutoSwitchCam-macOS` as SKU.
-Apple requires creating this record on its website. The CI provisioning step can
-register the bundle IDs before the record exists, then reports that the app
-record is needed. After creating it, rerun the failed distribution job.
+Apple requires creating this record on its website. Register both bundle IDs and
+enable the capabilities above in Certificates, Identifiers & Profiles before
+generating the two distribution profiles.
 
 Create an internal TestFlight group in App Store Connect and enable automatic
 distribution if you want each processed build assigned to that group. A build
@@ -52,23 +51,31 @@ check; external beta review is separate.
 ## Repository secrets
 
 Configure these in **Settings → Secrets and variables → Actions** for
-`diogoviannaaraujo/AutoSwitchCam`. The names match Lightray so the existing Apple
-identities and API key can be reused. Secret values must be transferred securely
-from their original files or credential store; GitHub never returns saved values.
+`diogoviannaaraujo/AutoSwitchCam`. AutoSwitchCam uses its own signing certificates,
+app-specific profiles, and
+Developer-role API key named **AutoSwitchCam CI**. The developer team and API
+issuer ID are account identifiers shared with the other apps; private credentials
+are configured independently. GitHub never returns saved secret values.
 
 | Secret | Value |
 | --- | --- |
-| `IOS_DISTRIBUTION_P12` | Base64 `.p12` containing the Apple Distribution certificate and private key; this certificate also signs macOS apps |
-| `IOS_DISTRIBUTION_PASSWORD` | Its `.p12` export password |
+| `MACOS_DISTRIBUTION_P12` | Base64 `.p12` containing the Apple Distribution certificate and private key; this certificate also signs macOS apps |
+| `MACOS_DISTRIBUTION_PASSWORD` | Its `.p12` export password |
 | `MACOS_INSTALLER_P12` | Base64 `.p12` containing the Mac Installer Distribution certificate and private key |
 | `MACOS_INSTALLER_PASSWORD` | Its `.p12` export password |
-| `APPLE_NOTARY_KEY` | App Store Connect API `.p8` contents, despite the historical secret name |
-| `APPLE_NOTARY_KEY_ID` | API key ID |
-| `APPLE_NOTARY_ISSUER_ID` | API issuer ID |
+| `APP_STORE_CONNECT_KEY` | AutoSwitchCam CI App Store Connect API `.p8` contents |
+| `APP_STORE_CONNECT_KEY_ID` | API key ID |
+| `MACOS_APP_STORE_PROFILE` | Base64 Mac App Store profile for the main app |
+| `CAMERA_EXTENSION_APP_STORE_PROFILE` | Base64 Mac App Store profile for the camera extension |
+| `APP_STORE_CONNECT_ISSUER_ID` | API issuer ID |
 
-The API key needs access to AutoSwitchCam and Certificates, Identifiers & Profiles.
+The API key needs Developer access for uploads and TestFlight build status.
+Profiles are created in the browser, so CI does not need to manage signing assets
+in the developer portal.
 Signing assets are temporary, excluded from Git, and removed by the job's cleanup
 step. Keep the matching certificate/private key available when renewing profiles.
+The signing certificates and profiles created on October 18, 2026 expire on
+October 18, 2027. Renew each certificate and its matching profiles together.
 
 To validate without signing or uploading, manually run **Release** and uncheck
 **testflight**. Pushes to `main` always attempt distribution after validation.
