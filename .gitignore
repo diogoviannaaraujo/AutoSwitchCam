@@ -4,3 +4,8 @@ Derived/
 DerivedData/
 .build/
 .DS_Store
+__pycache__/
+*.p8
+*.p12
+*.provisionprofile
+*.mobileprovision

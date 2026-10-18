@@ -43,11 +43,15 @@ let project = Project(
                 "CFBundleShortVersionString": "$(MARKETING_VERSION)",
                 "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "LSUIElement": true,
+                "LSApplicationCategoryType": "public.app-category.video",
+                "ITSAppUsesNonExemptEncryption": false,
                 "NSCameraUsageDescription": "AutoSwitchCam shows your cameras through its virtual camera and watches them for movement.",
                 "NSCameraUseContinuityCameraDeviceType": true,
             ]),
             sources: ["App/**"],
+            resources: ["App/Assets.xcassets"],
             entitlements: .dictionary([
+                "com.apple.security.app-sandbox": true,
                 "com.apple.developer.system-extension.install": true,
                 "com.apple.security.device.camera": true,
             ]),
@@ -56,6 +60,7 @@ let project = Project(
                 .target(name: "AutoSwitchCamExtension"),
             ],
             settings: targetSettings([
+                "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "",
                 "SWIFT_DEFAULT_ACTOR_ISOLATION": "MainActor",
             ])
         ),

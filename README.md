@@ -167,6 +167,10 @@ A few jobs still only have C APIs, such as writing into the extension's sink str
 
 ## Requirements
 
+The public repository is [diogoviannaaraujo/AutoSwitchCam](https://github.com/diogoviannaaraujo/AutoSwitchCam).
+GitHub Actions tests and archives pull requests and pushes, then signs and uploads
+each `main` build to TestFlight. See [CI and Apple signing setup](docs/testflight.md).
+
 - macOS 27 or later
 - Xcode 27 (Swift 6.4). `Tuist.swift` only accepts Xcode 27.x, so bump its `compatibleXcodeVersions` when moving to a new major Xcode
 - [Tuist](https://github.com/tuist/tuist) 4
