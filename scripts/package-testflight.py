@@ -72,7 +72,11 @@ def sign_bundle(bundle, target, options, temporary):
             entitlements[name] = profile['Entitlements'][name]
     path = temporary / (target + '.entitlements')
     path.write_bytes(plistlib.dumps(entitlements))
-    shutil.copy2(source, bundle / 'Contents/embedded.provisionprofile')
+    embedded = bundle / 'Contents/embedded.provisionprofile'
+    shutil.copy2(source, embedded)
+    # The installer makes app files root-owned. Public signing metadata must
+    # remain readable so every user's process can validate the code signature.
+    embedded.chmod(0o644)
     run('codesign', '--force', '--sign', options.identity, '--options', 'runtime',
         '--timestamp', '--entitlements', path, bundle)
 

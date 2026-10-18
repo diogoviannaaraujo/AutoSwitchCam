@@ -3,7 +3,11 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
 from pathlib import Path
+import plistlib
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('package_testflight', Path(__file__).parents[1] / 'package-testflight.py')
 package = importlib.util.module_from_spec(spec)
@@ -29,6 +33,34 @@ class ProvisioningProfileTests(unittest.TestCase):
 
     def test_accepts_matching_mac_app_store_profile(self):
         self.validate()
+
+    def test_embedded_profile_is_readable_by_all_users(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contents = root / 'AutoSwitchCam.app/Contents'
+            contents.mkdir(parents=True)
+            (contents / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleIdentifier': package.APP_ID}))
+            entitlements = root / 'archive/Entitlements'
+            entitlements.mkdir(parents=True)
+            (entitlements / 'AutoSwitchCam.entitlements').write_bytes(plistlib.dumps({
+                'com.apple.security.app-sandbox': True,
+                'com.apple.developer.system-extension.install': True,
+            }))
+            profiles = root / 'profiles'
+            profiles.mkdir()
+            source = profiles / 'AutoSwitchCam.provisionprofile'
+            source.write_bytes(b'public profile data')
+            source.chmod(0o600)
+            profile = deepcopy(self.profile)
+            profile['ExpirationDate'] = profile['ExpirationDate'].replace(tzinfo=None)
+            profile['Entitlements']['com.apple.developer.system-extension.install'] = True
+            options = SimpleNamespace(profiles=profiles, archive=root / 'archive', identity=self.identity)
+            with patch.object(package, 'run', return_value=SimpleNamespace(stdout=plistlib.dumps(profile))):
+                package.sign_bundle(contents.parent, 'AutoSwitchCam', options, root)
+            embedded = contents / 'embedded.provisionprofile'
+            self.assertEqual(embedded.read_bytes(), source.read_bytes())
+            self.assertEqual(embedded.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(source.stat().st_mode & 0o777, 0o600)
 
     def test_rejects_wrong_platform(self):
         with self.assertRaisesRegex(ValueError, 'macOS'):
