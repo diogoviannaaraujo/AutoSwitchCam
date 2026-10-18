@@ -30,8 +30,9 @@ public enum VirtualCamera {
     public static let height = 1080
     public static let frameRate = 30
     public static let frameDuration = CMTime(value: 1, timescale: CMTimeScale(frameRate))
-    /// BGRA, so the extension can draw its placeholder with CoreGraphics.
-    public static let pixelFormat = kCVPixelFormatType_32BGRA
+    /// 420v, the format the app asks its cameras for, so a frame from a
+    /// 1920×1080 camera goes to the extension as it is, without a copy.
+    public static let pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
 
     public static var pixelBufferAttributes: CVPixelBufferCreationAttributes {
         var attributes = CVPixelBufferCreationAttributes(

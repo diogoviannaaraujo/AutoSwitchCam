@@ -91,7 +91,7 @@ public final class AutoSwitchEngine {
         Task {
             for await camera in director.liveChanges {
                 liveCamera = camera
-                await output.setLiveCamera(camera)
+                frameStore.setLiveCamera(camera)
             }
         }
         Task { await usage.run() }

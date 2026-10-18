@@ -19,7 +19,7 @@ Webcams ─► Capture ─► Mode stack ─► Director ─► Output ─► Vi
 1. **Capture**: while an app is showing the AutoSwitchCam camera, the app opens every camera you turned on in Settings (built-in, USB, Continuity Camera, or a virtual camera such as OBS Virtual Camera) and keeps them all streaming, so switching is instant. When no app is showing it, the cameras are closed and AutoSwitchCam uses almost no CPU. Cameras start off, and the choices are saved between launches. AutoSwitchCam's own virtual camera is never listed, to avoid a feedback loop. Cameras can be plugged in or removed while the app runs.
 2. **Mode stack**: each enabled switching mode looks at the cameras and either *picks* one or *passes*.
 3. **Director**: goes through the mode stack in priority order, takes the first pick and applies the anti-flicker rules to decide which camera is live. When every mode passes for a few seconds, it goes back to the main camera.
-4. **Output**: while an app is showing the camera, runs its own 30 fps clock (1920×1080 by default) and sends the live camera's latest frame, scaled to that size, to the camera extension.
+4. **Output**: while an app is showing the camera, sends each frame from the live camera to the camera extension as it arrives, at up to 30 fps. The virtual camera is 1920×1080 420v, the format the cameras deliver, so a frame from a 1080p camera goes through unchanged, without a copy. Frames of another size are scaled to fit, with black bars when the shape differs.
 5. **Virtual camera**: a Core Media I/O camera extension presents those frames to other apps as a regular webcam, and tells the app whenever an app starts or stops showing it. While no video comes from the app, it shows a placeholder frame.
 
 ## Switching modes
@@ -122,7 +122,7 @@ The camera extension runs in its own sandboxed process, so the app can't draw in
 - a **source** stream, which Zoom, Meet and other apps read;
 - a **sink** stream, which the app writes to.
 
-The app finds the AutoSwitchCam device through the CoreMediaIO C API (there is no Swift API for this part) and enqueues `CMSampleBuffer`s into the sink stream. The extension forwards each buffer to the source stream, and switches to the placeholder when frames stop arriving.
+The app finds the AutoSwitchCam device through the CoreMediaIO C API (there is no Swift API for this part) and enqueues `CMSampleBuffer`s into the sink stream. The extension forwards each buffer to the source stream, and switches to the placeholder when frames stop arriving. The frames are IOSurface-backed, so they cross from the app to the extension and on to other apps without being copied; a frame from a 1080p camera is the camera's own buffer all the way. The extension draws its placeholder with CoreGraphics in BGRA and converts it to 420v once, when it starts.
 
 The extension also publishes a custom device property, `4cc_inus_glob_0000`, which apps read as the selector `'inus'`. It's `"1"` while any app is reading the source stream and `"0"` otherwise, and the extension announces every change. The app listens for it (and checks it once a second as a fallback), opens the cameras and the sink stream when it turns `"1"`, and closes them when it turns `"0"`. For the first 5 seconds after an app opens the camera, the placeholder leaves out its "Open the AutoSwitchCam app" hint, because the app is still starting its cameras. This is the app-to-extension pattern Apple shows in the WWDC22 session [Create camera extensions with Core Media IO](https://developer.apple.com/videos/play/wwdc2022/10022/).
 
@@ -141,7 +141,7 @@ AutoSwitchCam/
 │   │   ├── Manual/
 │   │   └── TimedRotation/ # (later)
 │   ├── Director/          # Mode stack evaluation and anti-flicker rules
-│   └── Output/            # Output clock, scaling, sink stream client
+│   └── Output/            # Sending frames, sink stream client
 ├── Shared/                # IDs and names used by the app and the extension
 └── Tests/                 # Unit tests for AutoSwitchCore
 ```
@@ -157,7 +157,7 @@ AutoSwitchCam targets macOS 27 only. It has no availability checks or fallbacks 
 | Capture | AVFoundation: `AVCaptureDevice.DiscoverySession` and one `AVCaptureSession` per camera, each run by an actor on its own serial queue. Planned: macOS 27's low-light video noise reduction where a camera supports it |
 | Frames | `Sendable` CoreVideo and CoreMedia types (`CVReadOnlyPixelBuffer`, `CVMutablePixelBuffer`, `CMReadySampleBuffer`), so frames move between actors without unsafe wrappers |
 | Motion analysis | Accelerate's Swift vImage API (`vImage.PixelBuffer`) |
-| Scaling | VideoToolbox (`VTPixelTransferSession`) |
+| Scaling | VideoToolbox (`VTPixelTransferSession`), only for frames that aren't already 1920×1080 420v, and for the placeholder |
 | UI | SwiftUI `MenuBarExtra` and a `Settings` scene with `@Observable` models |
 | Actions (planned) | App Intents for pinning a camera and returning to Auto, so they also work from Shortcuts and Spotlight |
 | Launch at login (planned) | ServiceManagement (`SMAppService`) |
@@ -220,6 +220,7 @@ To watch the app's and the extension's logs, including every camera switch and t
 - **The app has to be running** for the virtual camera to show video; otherwise it shows the placeholder. Launch at login is planned.
 - **While an app shows AutoSwitchCam, every camera that's on streams at once**, which costs CPU, power and USB bandwidth. Several high-resolution USB webcams on one hub can run out of bandwidth. When no app shows it, the cameras are off.
 - **Video takes a moment to start.** The cameras only start when an app opens AutoSwitchCam, so the first second or so (longer for an iPhone) shows the AutoSwitchCam placeholder.
+- **A live camera that stops sending frames shows the placeholder** after half a second, instead of its last frame, until it comes back or another camera goes live.
 - **Some apps only look for cameras at launch**, so restart them after installing AutoSwitchCam.
 - **A virtual camera that appears while AutoSwitchCam runs may not be listed until you relaunch AutoSwitchCam**, for example one whose app was installed or updated in the meantime. Running apps don't see camera extensions that start after them (see the next limitation).
 - **Open apps don't see the camera again after the extension restarts.** When the camera extension is updated, crashes, or is turned off and on, processes that are already running never see the AutoSwitchCam camera come back. AutoSwitchCam relaunches itself after it updates the extension; other apps that were using the camera need to be reopened.

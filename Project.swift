@@ -14,7 +14,7 @@ let projectSettings: SettingsDictionary = SettingsDictionary()
     .automaticCodeSigning(devTeam: developmentTeam)
     .swiftVersion("6")
     .marketingVersion("1.0")
-    .currentProjectVersion("4")
+    .currentProjectVersion("5")
     .merging([
         "SWIFT_APPROACHABLE_CONCURRENCY": "YES",
     ])

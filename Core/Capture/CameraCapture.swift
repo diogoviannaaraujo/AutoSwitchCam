@@ -19,8 +19,12 @@ actor CameraCapture {
     private let analysisFrames: AsyncStream<AnalysisFrame>.Continuation
     private let downscaler = LumaDownscaler()
     private var lastAnalysis: ContinuousClock.Instant?
+    /// Frames dropped for lack of buffers since the last report.
+    private var outOfBufferDrops = 0
+    private var lastDropReport: ContinuousClock.Instant?
 
     private static let analysisInterval = Duration.milliseconds(100)
+    private static let dropReportInterval = Duration.seconds(5)
 
     init(camera: CameraID, frameStore: FrameStore, analysisFrames: AsyncStream<AnalysisFrame>.Continuation) {
         self.camera = camera
@@ -67,6 +71,19 @@ actor CameraCapture {
             analysisFrames.yield(AnalysisFrame(camera: camera, luma: luma, time: now))
         }
     }
+
+    /// Logs, at most every few seconds, frames the camera dropped because all
+    /// its buffers were still in use, for example held by apps showing the
+    /// virtual camera. Late frames are dropped on purpose, so they don't count.
+    fileprivate func handleDrop(_ reason: CMDroppedFrameReason?) {
+        guard reason == .outOfBuffers else { return }
+        outOfBufferDrops += 1
+        let now = ContinuousClock.now
+        if let lastDropReport, now - lastDropReport < Self.dropReportInterval { return }
+        lastDropReport = now
+        logger.error("\(self.camera.rawValue, privacy: .public) ran out of buffers and dropped \(self.outOfBufferDrops) frames")
+        outOfBufferDrops = 0
+    }
 }
 
 enum CaptureError: Error {
@@ -84,5 +101,11 @@ private final class SampleBufferDelegate: NSObject, AVCaptureVideoDataOutputSamp
         nonisolated(unsafe) let pixelBuffer = imageBuffer
         let frame = CVReadOnlyPixelBuffer(unsafeBuffer: pixelBuffer)
         capture.assumeIsolated { $0.handle(frame) }
+    }
+
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let capture else { return }
+        let reason = (sampleBuffer.attachments[.droppedFrameReason]?.value as? String).flatMap(CMDroppedFrameReason.init)
+        capture.assumeIsolated { $0.handleDrop(reason) }
     }
 }

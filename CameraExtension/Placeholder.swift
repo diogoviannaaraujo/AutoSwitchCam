@@ -4,10 +4,16 @@ import CoreVideo
 
 /// The frame the camera shows while the AutoSwitchCam app isn't sending video.
 enum Placeholder {
+    /// Draws the placeholder in BGRA, which CoreGraphics can draw into, then
+    /// converts it once to the camera's pixel format.
+    ///
     /// - Parameter showsHint: Whether to add a line under the name that tells people to open the app.
     static func makePixelBuffer(showsHint: Bool) throws -> CVReadOnlyPixelBuffer {
-        var buffer = try CVMutablePixelBuffer(VirtualCamera.pixelBufferAttributes)
-        buffer.accessUnsafeMutableRawPlaneBytes { planes in
+        var drawing = try CVMutablePixelBuffer(CVPixelBufferCreationAttributes(
+            pixelFormatType: CVPixelFormatType(rawValue: kCVPixelFormatType_32BGRA),
+            size: CVImageSize(width: VirtualCamera.width, height: VirtualCamera.height)
+        ))
+        drawing.accessUnsafeMutableRawPlaneBytes { planes in
             guard let plane = planes.first,
                   let context = CGContext(
                       data: plane.bytes.baseAddress,
@@ -21,6 +27,8 @@ enum Placeholder {
             else { return }
             draw(in: context, size: CGSize(width: plane.properties.size.width, height: plane.properties.size.height), showsHint: showsHint)
         }
+        var buffer = try CVMutablePixelBuffer(VirtualCamera.pixelBufferAttributes)
+        try PixelScaler().transfer(CVReadOnlyPixelBuffer(drawing), to: &buffer)
         return CVReadOnlyPixelBuffer(buffer)
     }
 
