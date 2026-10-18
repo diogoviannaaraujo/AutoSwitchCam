@@ -7,9 +7,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        xcodebuild -version
+        xcode_version=$(xcodebuild -version)
+        printf '%s\n' "$xcode_version"
         swift --version
-        xcodebuild -version | head -1 | grep -Eq '^Xcode 27\.'
+        [[ "$xcode_version" == "Xcode 27."* ]]
         test "$(uname -m)" = arm64
 
     - name: Install Tuist 4.110.3
